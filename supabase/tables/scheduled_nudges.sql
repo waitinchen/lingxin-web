@@ -1,0 +1,21 @@
+CREATE TABLE scheduled_nudges (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT,
+    intent_type VARCHAR(50) NOT NULL,
+    who_target VARCHAR(100) DEFAULT 'self',
+    what_action TEXT NOT NULL,
+    when_time TIMESTAMPTZ,
+    when_rrule TEXT,
+    where_location TEXT,
+    constraints_data JSONB,
+    notes TEXT,
+    source_msg_ids UUID[],
+    status VARCHAR(20) DEFAULT 'draft',
+    version INTEGER DEFAULT 1,
+    dnd_respect BOOLEAN DEFAULT true,
+    priority INTEGER DEFAULT 1,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);

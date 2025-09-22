@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>靈信 2.0 - 智能對話助理</title>
+  <script>
+    // 強力移除浮水印的腳本
+    (function() {
+      function removeWatermarks() {
+        console.log('🔍 開始掃描和移除浮水印...');
+        
+        // 1. 通過文字內容移除
+        const allElements = document.getElementsByTagName('*');
+        for (let i = allElements.length - 1; i >= 0; i--) {
+          const element = allElements[i];
+          const text = element.textContent || element.innerText || '';
+          
+          // 檢查是否包含浮水印相關文字
+          if (text.includes('Created by MiniMax Agent') || 
+              text.includes('MiniMax Agent') || 
+              text.includes('Created by') && text.includes('Agent')) {
+            
+            // 確保不是重要內容容器
+            if (element.id !== 'root' && 
+                element.tagName !== 'BODY' && 
+                element.tagName !== 'HTML' &&
+                !element.querySelector('#root')) {
+              console.log('📧 移除包含浮水印文字的元素:', element);
+              element.remove();
+            }
+          }
+        }
+        
+        // 2. 通過位置移除右下角元素
+        const positionedElements = document.querySelectorAll('*');
+        positionedElements.forEach(el => {
+          const style = window.getComputedStyle(el);
+          const rect = el.getBoundingClientRect();
+          
+          // 檢查是否在右下角
+          if ((style.position === 'fixed' || style.position === 'absolute') &&
+              (rect.right > window.innerWidth - 200) &&
+              (rect.bottom > window.innerHeight - 100) &&
+              rect.width < 300 && rect.height < 100) {
+            
+            const text = el.textContent || el.innerText || '';
+            if (text.length < 50 && (text.includes('Created') || text.includes('MiniMax') || text.includes('Agent'))) {
+              console.log('📍 移除右下角位置的浮水印元素:', el);
+              el.remove();
+            }
+          }
+        });
+        
+        // 3. 移除可疑的小元素
+        const suspiciousElements = document.querySelectorAll(
+          'div[style*="position: fixed"], div[style*="position: absolute"], ' +
+          '[class*="watermark"], [id*="watermark"], [data-watermark]'
+        );
+        
+        suspiciousElements.forEach(el => {
+          const text = (el.textContent || el.innerText || '').trim();
+          if (text.includes('MiniMax') || text.includes('Created by')) {
+            console.log('🎯 移除可疑的浮水印元素:', el);
+            el.remove();
+          }
+        });
+        
+        console.log('✅ 浮水印掃描完成');
+      }
+      
+      // 多階段執行
+      function scheduleRemoval() {
+        removeWatermarks();
+        setTimeout(removeWatermarks, 100);
+        setTimeout(removeWatermarks, 500);
+        setTimeout(removeWatermarks, 1000);
+        setTimeout(removeWatermarks, 3000);
+        setTimeout(removeWatermarks, 5000);
+      }
+      
+      // DOM 就緒時執行
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', scheduleRemoval);
+      } else {
+        scheduleRemoval();
+      }
+      
+      // 頁面完全加載後執行
+      window.addEventListener('load', scheduleRemoval);
+      
+      // 持續監控 DOM 變化
+      let observerTimeout;
+      const observer = new MutationObserver(() => {
+        clearTimeout(observerTimeout);
+        observerTimeout = setTimeout(removeWatermarks, 50);
+      });
+      
+      // 開始監控
+      if (document.body) {
+        observer.observe(document.body, {
+          childList: true,
+          subtree: true,
+          attributes: true,
+          attributeFilter: ['style', 'class']
+        });
+      } else {
+        setTimeout(() => {
+          if (document.body) {
+            observer.observe(document.body, {
+              childList: true,
+              subtree: true,
+              attributes: true,
+              attributeFilter: ['style', 'class']
+            });
+          }
+        }, 100);
+      }
+      
+      // 定期清理（每5秒檢查一次）
+      setInterval(removeWatermarks, 5000);
+      
+    })();
+  </script>
+  <style>
+    /* CSS 隱藏可能的浮水印 */
+    *[class*="watermark"],
+    *[id*="watermark"],
+    *[data-watermark] {
+      display: none !important;
+      visibility: hidden !important;
+      opacity: 0 !important;
+    }
+    
+    /* 隱藏包含特定文字的元素 */
+    *:after,
+    *:before {
+      content: none !important;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+
+</html>

@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --radius: 0.5rem;
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%
+  }
+
+  .dark {
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%
+  }
+}
+
+
+
+img {
+  object-position: top;
+}
+
+.fixed {
+  position: fixed;
+}
+
+/* 隱藏浮水印 */
+[class*="watermark"],
+[id*="watermark"],
+[class*="minimax"],
+[id*="minimax"],
+div[style*="position: fixed"][style*="bottom"][style*="right"],
+div[style*="position: absolute"][style*="bottom"][style*="right"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+}
+
+/* 隱藏可能的浮水印文字 */
+*[data-content*="MiniMax"],
+*[data-content*="Created by"],
+*[aria-label*="MiniMax"],
+*[title*="MiniMax"] {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+/* 隱藏任何在右下角的小元素 */
+body > div:last-child[style*="position"],
+body > div[style*="z-index: 999"],
+body > div[style*="z-index: 9999"] {
+  display: none !important;
+}
