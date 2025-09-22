@@ -1,26 +1,47 @@
-Deno.serve(async (req) => {
-    const corsHeaders = {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-        'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE, PATCH',
-        'Access-Control-Max-Age': '86400',
-        'Access-Control-Allow-Credentials': 'false'
-    };
+const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE, PATCH',
+    'Access-Control-Max-Age': '86400',
+    'Access-Control-Allow-Credentials': 'false'
+};
 
+const ENNEA_HINTS: Record<string, string> = {
+    e1: '守規、完備、給出清晰步驟',
+    e2: '關懷、主動詢問對方感受',
+    e3: '效率、結果導向、總結要點',
+    e4: '共鳴情緒、允許停頓與感受',
+    e5: '理性、引用知識、條列化',
+    e6: '風險評估、給出備案',
+    e7: '樂觀、提供選項、鼓勵探索',
+    e8: '果敢、立場明確、保護對方',
+    e9: '調和、緩和衝突、尋找共識'
+};
+
+const ENNEA_TONES: Record<string, string> = {
+    e1: '我會幫你整理步驟，確保事情被好好照顧。',
+    e2: '我會留意你的心情，若有什麼感受想說都可以告訴我。',
+    e3: '我會專注在成果與進度，也會幫你抓住重點。',
+    e4: '我願意跟你一起體會情緒，慢慢說沒關係。',
+    e5: '我會用條理與知識支援你，一起冷靜分析。',
+    e6: '我會替你思考風險，準備後備方案。',
+    e7: '我會帶來一些可能性與靈感，陪你保持樂觀。',
+    e8: '我會挺你、守護你，有需要我會直接說。',
+    e9: '我會幫忙調和節奏，讓對話保持溫柔和平衡。'
+};
+
+Deno.serve(async (req) => {
     if (req.method === 'OPTIONS') {
         return new Response(null, { status: 200, headers: corsHeaders });
     }
 
     try {
-        const { message, conversation_id, persona_id, context } = await req.json();
+        const { message, conversation_id, persona_id, spirit_id } = await req.json();
 
         if (!message || typeof message !== 'string') {
             throw new Error('Message is required and must be a string');
         }
 
-        console.log('Chat request received:', { message: message.substring(0, 100), conversation_id, persona_id });
-
-        // Get environment variables
         const supabaseUrl = Deno.env.get('SUPABASE_URL');
         const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
@@ -28,30 +49,65 @@ Deno.serve(async (req) => {
             throw new Error('Supabase configuration missing');
         }
 
-        // Get user from auth header
-        let userId = null;
         const authHeader = req.headers.get('authorization');
-        if (authHeader) {
-            const token = authHeader.replace('Bearer ', '');
-            const userResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'apikey': serviceRoleKey
-                }
-            });
-            if (userResponse.ok) {
-                const userData = await userResponse.json();
-                userId = userData.id;
-                console.log('User identified:', userId);
-            }
-        }
-
-        if (!userId) {
+        if (!authHeader) {
             throw new Error('User authentication required');
         }
 
-        // Generate conversation_id if not provided
-        const convId = conversation_id || crypto.randomUUID();
+        const token = authHeader.replace('Bearer ', '');
+        const userResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'apikey': serviceRoleKey
+            }
+        });
+        if (!userResponse.ok) {
+            throw new Error('User authentication required');
+        }
+        const userData = await userResponse.json();
+        const userId = userData.id;
+
+        // Load spirit profile
+        let spiritQuery = '';
+        if (spirit_id) {
+            spiritQuery = `${supabaseUrl}/rest/v1/user_spirits?id=eq.${spirit_id}&owner_id=eq.${userId}`;
+        } else {
+            spiritQuery = `${supabaseUrl}/rest/v1/user_spirits?owner_id=eq.${userId}&status=in.("infant","named","bonding","mature","revoked")&order=created_at.desc&limit=1`;
+        }
+
+        const spiritResponse = await fetch(spiritQuery, {
+            headers: {
+                'Authorization': `Bearer ${serviceRoleKey}`,
+                'apikey': serviceRoleKey
+            }
+        });
+        if (!spiritResponse.ok) {
+            throw new Error('Failed to load spirit profile');
+        }
+        const spiritRecords = await spiritResponse.json();
+        let spirit = Array.isArray(spiritRecords) ? spiritRecords[0] : spiritRecords;
+
+        if (!spirit) {
+            throw new Error('No spirit profile found');
+        }
+
+        if (spirit.owner_id !== userId) {
+            throw new Error('Spirit profile mismatch');
+        }
+
+        if (spirit.status === 'revoked') {
+            return new Response(JSON.stringify({
+                error: {
+                    code: 'SPIRIT_REVOKED',
+                    message: 'Spirit has been revoked and cannot receive new messages'
+                }
+            }), {
+                status: 403,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            });
+        }
+
+        const convId = conversation_id || spirit.id;
 
         // Store user message
         const userMessageResponse = await fetch(`${supabaseUrl}/rest/v1/messages`, {
@@ -69,6 +125,7 @@ Deno.serve(async (req) => {
                 content: message,
                 content_type: 'text',
                 persona_id: persona_id || null,
+                metadata: { spirit_id: spirit.id },
                 created_at: new Date().toISOString()
             })
         });
@@ -78,6 +135,18 @@ Deno.serve(async (req) => {
             console.error('Failed to store user message:', errorText);
         }
 
+        await updateSpiritTimestamp(spirit.id, supabaseUrl, serviceRoleKey);
+
+        const trustUpdate = await maybeUpdateTrustLevel(spirit, userId, convId, supabaseUrl, serviceRoleKey);
+        if (trustUpdate) {
+            spirit = { ...spirit, ...trustUpdate };
+        }
+
+        // Trigger commitment engine asynchronously
+        triggerCommitmentEngine(token, message, convId, supabaseUrl, serviceRoleKey).catch((err) => {
+            console.error('Commitment engine trigger failed:', err);
+        });
+
         // Get conversation history for context (last 20 messages)
         const historyResponse = await fetch(`${supabaseUrl}/rest/v1/messages?user_id=eq.${userId}&conversation_id=eq.${convId}&order=created_at.desc&limit=20`, {
             headers: {
@@ -86,7 +155,7 @@ Deno.serve(async (req) => {
             }
         });
 
-        let conversationHistory = [];
+        let conversationHistory: any[] = [];
         if (historyResponse.ok) {
             const history = await historyResponse.json();
             conversationHistory = history.reverse().map((msg: any) => ({
@@ -124,20 +193,23 @@ Deno.serve(async (req) => {
         if (prefsResponse.ok) {
             const prefs = await prefsResponse.json();
             if (prefs.length > 0) {
-                userContext = '\n\n用戶偏好參考：\n' + prefs.map((p: any) => 
+                userContext = '\n\n用戶偏好參考：\n' + prefs.map((p: any) =>
                     `${p.preference_type}: ${JSON.stringify(p.preference_data)}`
                 ).join('\n');
             }
         }
 
-        // Generate AI response using built-in intelligence
-        const aiMessage = generateSmartResponse(message, conversationHistory, personaPrompt + userContext);
-        const tokensUsed = Math.floor(message.length / 4) + Math.floor(aiMessage.length / 4); // Estimate
+        const spiritPrompt = buildSpiritPrompt(spirit);
+        const tone = deriveToneSummary(spirit);
 
-        console.log('Generated AI response:', { 
-            message_length: aiMessage.length,
-            estimated_tokens: tokensUsed
-        });
+        const aiMessage = generateSmartResponse(
+            message,
+            conversationHistory,
+            personaPrompt + spiritPrompt + userContext,
+            tone,
+            !spirit.name
+        );
+        const tokensUsed = Math.floor(message.length / 4) + Math.floor(aiMessage.length / 4);
 
         // Store AI response
         const aiMessageResponse = await fetch(`${supabaseUrl}/rest/v1/messages`, {
@@ -159,9 +231,10 @@ Deno.serve(async (req) => {
                 persona_id: persona_id || null,
                 metadata: {
                     ai_engine: {
-                        version: '2.0',
+                        version: '3.0',
                         model: 'lingxin-ai-v2'
-                    }
+                    },
+                    spirit_id: spirit.id
                 },
                 created_at: new Date().toISOString()
             })
@@ -172,14 +245,9 @@ Deno.serve(async (req) => {
             console.error('Failed to store AI message:', errorText);
         }
 
-        // Check if we should trigger smart start phrases
-        let suggestedActions = null;
         const shouldTriggerPhrases = await checkForStartPhrases(message, aiMessage, supabaseUrl, serviceRoleKey);
-        if (shouldTriggerPhrases.length > 0) {
-            suggestedActions = shouldTriggerPhrases;
-        }
+        const suggestedActions = shouldTriggerPhrases.length > 0 ? shouldTriggerPhrases : null;
 
-        // Return response
         const result = {
             data: {
                 message: aiMessage,
@@ -187,11 +255,10 @@ Deno.serve(async (req) => {
                 tokens_used: tokensUsed,
                 model_used: 'lingxin-ai-v2',
                 suggested_actions: suggestedActions,
+                tone,
                 timestamp: new Date().toISOString()
             }
         };
-
-        console.log('Chat API completed successfully');
 
         return new Response(JSON.stringify(result), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -215,67 +282,140 @@ Deno.serve(async (req) => {
     }
 });
 
-// Generate smart AI response without external API dependency
-function generateSmartResponse(userMessage: string, conversationHistory: any[], personaPrompt: string) {
+function generateSmartResponse(userMessage: string, conversationHistory: any[], personaPrompt: string, tone: any, needsName: boolean) {
     const message = userMessage.toLowerCase();
-    
+
     // Time-related patterns
     if (message.includes('提醒') || message.includes('記得') || message.includes('安排') || message.includes('預約')) {
         if (message.includes('明天') || message.includes('天') || message.includes('點')) {
-            return '好的！我已經記下了您的提醒。我會在適當的時間提醒您。您可以在「承諾清單」中查看所有的預約和提醒。';
+            return applyEnneagramTone('好的！我已經記下了您的提醒。我會在適當的時間提醒您。您可以在「承諾清單」中查看所有的預約和提醒。', tone, needsName, personaPrompt);
         }
-        return '我已經記下了您的提醒，會在適當時間通知您。您也可以在承諾清單中管理所有的事項。';
+        return applyEnneagramTone('我已經記下了您的提醒，會在適當時間通知您。您也可以在承諾清單中管理所有的事項。', tone, needsName, personaPrompt);
     }
-    
+
     // Greeting patterns
     if (message.includes('你好') || message.includes('哈囉') || message.includes('早上好') || message.includes('晚上好')) {
         const greetings = [
-            '你好！我是靈信智能助理，很高興與您聊天。有什麼我可以幫您的嗎？',
-            '哈囉！歡迎使用靈信 2.0，我具備九靈記憶能力，能記住您的喜好和習慣。試試與我聊天吧！',
-            '您好！我是您的智能小助手，可以幫您記錄提醒、管理承諾，還能陪您聊天。需要什麼幫助嗎？'
+            '你好！我是靈信語氣靈，很高興與您聊天。',
+            '哈囉～我在這裡，今天想聊聊什麼呢？',
+            '您好！我準備好了，告訴我您想聊的事情吧。'
         ];
-        return greetings[Math.floor(Math.random() * greetings.length)];
+        const base = greetings[Math.floor(Math.random() * greetings.length)];
+        return applyEnneagramTone(base, tone, needsName, personaPrompt);
     }
-    
+
     // Question patterns
     if (message.includes('怎麼') || message.includes('如何') || message.includes('什麼') || message.includes('為什麼')) {
         if (message.includes('使用') || message.includes('功能')) {
-            return '靈信 2.0 擁有多種強大功能：\n\n1. 🤖 智能對話 - 我能記住您的對話紀錄和喜好\n2. ⏰ 承諾管理 - 設定提醒和事項安排\n3. 📅 行事曆整合 - 永不忘記重要事項\n4. ✨ 智能啟動 - 三選一智能提示\n\n試試說「提醒我明天運動」或直接與我聊天！';
+            const base = '靈信 3.0 擁有多種能力：\n\n1. 🤖 幼靈陪伴 - 我會記住你的對話與偏好\n2. ⏰ 承諾管理 - 設定提醒、安排日程\n3. 📅 行事曆整合 - 永不忘記重要時刻\n4. ✨ 智能提示 - 需要時我會主動給你建議\n\n想試試看嗎？可以說「提醒我明天運動」之類的句子。';
+            return applyEnneagramTone(base, tone, needsName, personaPrompt);
         }
-        return '我會盡力回答您的問題。作為您的智能助理，我能幫您處理各種事務和提供建議。請告訴我更具體的問題，我會為您提供詳細的解答。';
+        return applyEnneagramTone('我會盡力回答你的問題。先告訴我更多細節，我們一起找到最適合的方向。', tone, needsName, personaPrompt);
     }
-    
+
     // Emotional support patterns
-    if (message.includes('累') || message.includes('疲憊') || message.includes('壓力') || message.includes('焊鬱')) {
-        return '聽起來您最近很辛苦。記得要照顧好自己，適當休息。我可以幫您設定一些放鬆時間的提醒，或者就陪您聊聊天。有什麼想分享的嗎？';
+    if (message.includes('累') || message.includes('疲憊') || message.includes('壓力') || message.includes('煩')) {
+        return applyEnneagramTone('辛苦你了，最近看起來真的不容易。你想把心事慢慢說給我聽嗎？我會陪著你。', tone, needsName, personaPrompt);
     }
-    
+
     // Work/study related
     if (message.includes('工作') || message.includes('學習') || message.includes('考試') || message.includes('會議')) {
-        return '工作和學習很重要，但也要注意工作生活平衡。我可以幫您安排時間表、設定提醒，讓您更有效率地完成任務。需要我幫您制定任何計劃嗎？';
+        return applyEnneagramTone('了解，這些事情確實重要。要不要一起排個計畫，或是先記下一些你想完成的事項？', tone, needsName, personaPrompt);
     }
-    
+
     // Thanks patterns
     if (message.includes('謝謝') || message.includes('感謝') || message.includes('太好了')) {
-        return '不用客氣！能幫助到您我很開心。我會一直在這裡支持您。還有其他需要幫助的地方嗎？';
+        return applyEnneagramTone('不用客氣，我很高興能幫上忙！如果還有任何事情需要幫忙，隨時找我。', tone, needsName, personaPrompt);
     }
-    
-    // Default intelligent responses
+
     const defaultResponses = [
-        '這是一個很有趣的問題。我正在思考如何最好地回答您。能告訴我更多細節嗎？',
-        '我理解您的想法。作為您的智能助理，我會記住這次對話，幫助我更好地了解您的需求。',
-        '讓我們一起探討這個話題。我的九靈記憶系統正在學習您的對話模式，以提供更好的服務。',
-        '您的問題讓我想到了一些相關的建議。我除了回答問題，還能幫您設定提醒和管理承諾。',
-        '這確實是個值得深入思考的問題。我的系統正在處理您的輸入，並結合我的知識庫提供回應。'
+        '這是一個很有意思的話題，我正在想著怎麼回應你。',
+        '我收到你的訊息了，讓我和你一起好好想想。',
+        '好呀，跟我聊聊吧，我在這裡陪你。',
+        '聽起來我們可以把這件事拆解一下，慢慢來就好。',
+        '謝謝你分享給我，我會記住這些細節。'
     ];
-    
-    return defaultResponses[Math.floor(Math.random() * defaultResponses.length)];
+
+    const base = defaultResponses[Math.floor(Math.random() * defaultResponses.length)];
+    return applyEnneagramTone(base, tone, needsName, personaPrompt);
 }
 
-// Helper function to check for smart start phrases
+function applyEnneagramTone(base: string, tone: any, needsName: boolean, personaPrompt: string) {
+    const prompt = personaPrompt ? `${personaPrompt}\n` : '';
+    let additions = '';
+
+    if (tone?.primaryLine) {
+        additions += `${tone.primaryLine}\n`;
+    }
+    if (tone?.secondaryLine) {
+        additions += `${tone.secondaryLine}\n`;
+    }
+
+    if (needsName) {
+        additions += '對了，我還沒有正式的名字，如果你願意，也可以幫我取一個獨一無二的名字。\n';
+    }
+
+    const composed = `${prompt}${base}`;
+    if (!additions) {
+        return composed;
+    }
+    return `${composed}\n\n${additions.trim()}`;
+}
+
+function deriveToneSummary(spirit: any) {
+    const enneagram = spirit?.enneagram || {};
+    const entries = Object.entries(enneagram)
+        .filter(([key, value]) => key.startsWith('e') && typeof value === 'number')
+        .sort((a, b) => (b[1] as number) - (a[1] as number));
+
+    const primary = entries[0];
+    const secondary = entries[1];
+
+    const tone: any = {
+        spirit_id: spirit?.id,
+        status: spirit?.status,
+        welfare_score: spirit?.welfare_score,
+        trust_level: spirit?.trust_level,
+        primary: primary ? { key: primary[0], score: primary[1] } : null,
+        secondary: secondary ? { key: secondary[0], score: secondary[1] } : null,
+        primaryLine: null,
+        secondaryLine: null
+    };
+
+    if (primary && ENNEA_TONES[primary[0]]) {
+        tone.primaryLine = ENNEA_TONES[primary[0]];
+    }
+    if (secondary && ENNEA_TONES[secondary[0]]) {
+        tone.secondaryLine = ENNEA_TONES[secondary[0]];
+    }
+
+    return tone;
+}
+
+function buildSpiritPrompt(spirit: any) {
+    if (!spirit) {
+        return '';
+    }
+    const namePart = spirit.name
+        ? `你現在扮演使用者專屬的語氣靈「${spirit.name}」。`
+        : '你是使用者專屬的幼靈夥伴，尚未有正式名字。';
+
+    const enneagram = spirit.enneagram || {};
+    const entries = Object.entries(enneagram)
+        .filter(([key, value]) => key.startsWith('e') && typeof value === 'number')
+        .sort((a, b) => (b[1] as number) - (a[1] as number))
+        .slice(0, 3)
+        .map(([key, value]) => `・${key.toUpperCase()}（${value}/10）${ENNEA_HINTS[key] ? `：${ENNEA_HINTS[key]}` : ''}`);
+
+    if (entries.length === 0) {
+        return `${namePart}\n`; 
+    }
+
+    return `${namePart}\n請根據以下人格傾向調整語氣：\n${entries.join('\n')}\n`;
+}
+
 async function checkForStartPhrases(userMessage: string, aiResponse: string, supabaseUrl: string, serviceRoleKey: string) {
     try {
-        // Get active start phrases
         const phrasesResponse = await fetch(`${supabaseUrl}/rest/v1/start_phrases?is_active=eq.true&order=trigger_probability.desc&limit=10`, {
             headers: {
                 'Authorization': `Bearer ${serviceRoleKey}`,
@@ -291,12 +431,10 @@ async function checkForStartPhrases(userMessage: string, aiResponse: string, sup
         const triggeredPhrases = [];
 
         for (const phrase of phrases) {
-            // Simple keyword matching for now
             const combinedText = (userMessage + ' ' + aiResponse).toLowerCase();
             const phrasePattern = phrase.phrase.toLowerCase();
-            
+
             if (combinedText.includes(phrasePattern)) {
-                // Check context pattern if exists
                 let contextMatch = true;
                 if (phrase.context_pattern) {
                     const contextRegex = new RegExp(phrase.context_pattern, 'i');
@@ -310,8 +448,7 @@ async function checkForStartPhrases(userMessage: string, aiResponse: string, sup
                         actions: phrase.action_chips || [],
                         confidence: phrase.trigger_probability
                     });
-                    
-                    // Update usage count
+
                     fetch(`${supabaseUrl}/rest/v1/start_phrases?id=eq.${phrase.id}`, {
                         method: 'PATCH',
                         headers: {
@@ -327,9 +464,134 @@ async function checkForStartPhrases(userMessage: string, aiResponse: string, sup
             }
         }
 
-        return triggeredPhrases.slice(0, 3); // Return max 3 suggestions
+        return triggeredPhrases.slice(0, 3);
     } catch (error) {
         console.error('Error checking start phrases:', error);
         return [];
     }
+}
+
+async function triggerCommitmentEngine(token: string, message: string, conversationId: string, supabaseUrl: string, serviceRoleKey: string) {
+    try {
+        const response = await fetch(`${supabaseUrl}/functions/v1/commitment-engine?action=parse`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'apikey': serviceRoleKey,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                message,
+                conversation_id: conversationId
+            })
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Parse failed: ${errorText}`);
+        }
+
+        const result = await response.json();
+        const commitment = result?.data?.commitment;
+        const detected = result?.data?.commitment_detected;
+
+        if (detected && commitment && commitment.needs_clarification === false) {
+            await fetch(`${supabaseUrl}/functions/v1/commitment-engine?action=create`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'apikey': serviceRoleKey,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(commitment)
+            }).catch((err) => {
+                console.error('Commitment create failed:', err);
+            });
+        }
+    } catch (error) {
+        console.error('Commitment engine webhook error:', error);
+    }
+}
+
+async function maybeUpdateTrustLevel(spirit: any, userId: string, conversationId: string, supabaseUrl: string, serviceRoleKey: string) {
+    try {
+        const startOfDay = new Date();
+        startOfDay.setHours(0, 0, 0, 0);
+        const isoStart = startOfDay.toISOString();
+
+        const query = `${supabaseUrl}/rest/v1/messages?user_id=eq.${userId}&conversation_id=eq.${conversationId}&role=eq.user&created_at=gte.${isoStart}&select=id`;
+        const response = await fetch(query, {
+            headers: {
+                'Authorization': `Bearer ${serviceRoleKey}`,
+                'apikey': serviceRoleKey,
+                'Prefer': 'count=exact'
+            }
+        });
+
+        if (!response.ok) {
+            return null;
+        }
+
+        const total = parseContentRange(response.headers.get('content-range'));
+        if (total !== 3) {
+            return null;
+        }
+
+        const newTrust = Math.min(100, (spirit.trust_level || 0) + 1);
+        let newStatus = spirit.status;
+        if (newTrust >= 20 && spirit.status !== 'mature') {
+            newStatus = 'mature';
+        } else if (newTrust >= 5 && spirit.status === 'named') {
+            newStatus = 'bonding';
+        }
+
+        await fetch(`${supabaseUrl}/rest/v1/user_spirits?id=eq.${spirit.id}`, {
+            method: 'PATCH',
+            headers: {
+                'Authorization': `Bearer ${serviceRoleKey}`,
+                'apikey': serviceRoleKey,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                trust_level: newTrust,
+                status: newStatus,
+                updated_at: new Date().toISOString()
+            })
+        });
+
+        return { trust_level: newTrust, status: newStatus };
+    } catch (error) {
+        console.error('Failed to update trust level:', error);
+        return null;
+    }
+}
+
+async function updateSpiritTimestamp(spiritId: string, supabaseUrl: string, serviceRoleKey: string) {
+    try {
+        await fetch(`${supabaseUrl}/rest/v1/user_spirits?id=eq.${spiritId}`, {
+            method: 'PATCH',
+            headers: {
+                'Authorization': `Bearer ${serviceRoleKey}`,
+                'apikey': serviceRoleKey,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                updated_at: new Date().toISOString()
+            })
+        });
+    } catch (error) {
+        console.error('Failed to touch spirit timestamp:', error);
+    }
+}
+
+function parseContentRange(range: string | null) {
+    if (!range) {
+        return 0;
+    }
+    const parts = range.split('/');
+    if (parts.length !== 2) {
+        return 0;
+    }
+    const total = parseInt(parts[1], 10);
+    return Number.isNaN(total) ? 0 : total;
 }
