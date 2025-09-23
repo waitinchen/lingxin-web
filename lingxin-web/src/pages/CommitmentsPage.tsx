@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase, Commitment } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
@@ -33,10 +33,11 @@ export default function CommitmentsPage() {
 
   useEffect(() => {
     loadCommitments();
-  }, [user]);
+  }, [loadCommitments]);
 
-  const loadCommitments = async () => {
-    if (!user) return;
+  const loadCommitments = useCallback(async () => {
+    const userId = user?.id;
+    if (!userId) return;
     
     try {
       setLoading(true);
@@ -61,7 +62,7 @@ export default function CommitmentsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.id]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
