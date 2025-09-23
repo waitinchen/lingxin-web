@@ -397,6 +397,30 @@ async function listCommitments(userId: string, status: string, limit: number, su
 
 // Update a commitment
 async function updateCommitment(userId: string, commitmentId: string, updates: any, supabaseUrl: string, serviceRoleKey: string) {
+    let previousStatus: string | null = null;
+    const shouldCheckCompletion = typeof updates.status === 'string' && updates.status === 'completed';
+
+    if (shouldCheckCompletion) {
+        try {
+            const existingResponse = await fetch(
+                `${supabaseUrl}/rest/v1/scheduled_nudges?id=eq.${commitmentId}&user_id=eq.${userId}&select=status&limit=1`,
+                {
+                    headers: {
+                        'Authorization': `Bearer ${serviceRoleKey}`,
+                        'apikey': serviceRoleKey
+                    }
+                }
+            );
+
+            if (existingResponse.ok) {
+                const existingRecords = await existingResponse.json();
+                previousStatus = existingRecords?.[0]?.status || null;
+            }
+        } catch (error) {
+            console.error('Failed to load existing commitment status:', error);
+        }
+    }
+
     const updateData = {
         ...updates,
         version: (updates.version || 1) + 1,
@@ -420,6 +444,11 @@ async function updateCommitment(userId: string, commitmentId: string, updates: a
     }
 
     const result = await response.json();
+
+    if (shouldCheckCompletion && previousStatus !== 'completed') {
+        await handleCommitmentCompletion(userId, supabaseUrl, serviceRoleKey);
+    }
+
     return result[0];
 }
 
@@ -484,6 +513,7 @@ async function runCommitmentScheduler(supabaseUrl: string, serviceRoleKey: strin
 
                 // Send the nudge (mark as completed for now)
                 await updateCommitmentStatus(commitment.id, 'completed', supabaseUrl, serviceRoleKey);
+                await handleCommitmentCompletion(commitment.user_id, supabaseUrl, serviceRoleKey);
                 await logNudgeEvent(commitment.id, commitment.user_id, 'sent', supabaseUrl, serviceRoleKey);
                 
                 results.sent++;
@@ -599,7 +629,7 @@ async function logNudgeEvent(nudgeId: string, userId: string, status: string, su
 async function createNextRecurrence(commitment: any, supabaseUrl: string, serviceRoleKey: string) {
     // Simple recurrence logic
     const nextTime = new Date(commitment.when_time);
-    
+
     if (commitment.when_rrule?.includes('DAILY')) {
         nextTime.setDate(nextTime.getDate() + 1);
     } else if (commitment.when_rrule?.includes('WEEKLY')) {
@@ -629,4 +659,138 @@ async function createNextRecurrence(commitment: any, supabaseUrl: string, servic
         },
         body: JSON.stringify(nextCommitment)
     });
+}
+
+async function handleCommitmentCompletion(userId: string, supabaseUrl: string, serviceRoleKey: string) {
+    try {
+        const spirit = await loadActiveSpirit(userId, supabaseUrl, serviceRoleKey);
+        if (!spirit || spirit.status === 'revoked') {
+            return;
+        }
+
+        const normalized = normalizeSpiritRecord(spirit);
+        const alreadyLogged = await hasSpiritEvent(normalized.id, 'first_commitment_done', supabaseUrl, serviceRoleKey);
+
+        if (!alreadyLogged) {
+            await logSpiritEvent(normalized.id, 'first_commitment_done', { user_id: userId }, supabaseUrl, serviceRoleKey);
+        }
+
+        if (!normalized.persona_badges.includes('守信')) {
+            await pushBadge(normalized, '守信', supabaseUrl, serviceRoleKey);
+        }
+    } catch (error) {
+        console.error('Failed to handle commitment completion:', error);
+    }
+}
+
+async function loadActiveSpirit(userId: string, supabaseUrl: string, serviceRoleKey: string) {
+    const response = await fetch(
+        `${supabaseUrl}/rest/v1/user_spirits?owner_id=eq.${userId}&status=in.("infant","named","bonding","mature")&order=created_at.desc&limit=1`,
+        {
+            headers: {
+                'Authorization': `Bearer ${serviceRoleKey}`,
+                'apikey': serviceRoleKey
+            }
+        }
+    );
+
+    if (!response.ok) {
+        return null;
+    }
+
+    const spirits = await response.json();
+    return spirits?.[0] || null;
+}
+
+async function hasSpiritEvent(
+    spiritId: string,
+    kind: string,
+    supabaseUrl: string,
+    serviceRoleKey: string
+) {
+    try {
+        const response = await fetch(
+            `${supabaseUrl}/rest/v1/spirit_events?spirit_id=eq.${spiritId}&kind=eq.${kind}&select=id&limit=1`,
+            {
+                headers: {
+                    'Authorization': `Bearer ${serviceRoleKey}`,
+                    'apikey': serviceRoleKey
+                }
+            }
+        );
+
+        if (!response.ok) {
+            return false;
+        }
+
+        const events = await response.json();
+        return Array.isArray(events) && events.length > 0;
+    } catch (error) {
+        console.error('Failed to check spirit event:', error);
+        return false;
+    }
+}
+
+async function logSpiritEvent(
+    spiritId: string,
+    kind: string,
+    payload: Record<string, unknown>,
+    supabaseUrl: string,
+    serviceRoleKey: string
+) {
+    try {
+        await fetch(`${supabaseUrl}/rest/v1/spirit_events`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${serviceRoleKey}`,
+                'apikey': serviceRoleKey,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                spirit_id: spiritId,
+                kind,
+                payload,
+                created_at: new Date().toISOString()
+            })
+        });
+    } catch (error) {
+        console.error('Failed to log spirit event:', error);
+    }
+}
+
+async function pushBadge(spirit: any, badge: string, supabaseUrl: string, serviceRoleKey: string) {
+    const existing = Array.isArray(spirit?.persona_badges) ? spirit.persona_badges : [];
+    if (existing.includes(badge)) {
+        return spirit;
+    }
+
+    const updatedBadges = [...existing, badge];
+
+    try {
+        await fetch(`${supabaseUrl}/rest/v1/user_spirits?id=eq.${spirit.id}`, {
+            method: 'PATCH',
+            headers: {
+                'Authorization': `Bearer ${serviceRoleKey}`,
+                'apikey': serviceRoleKey,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                persona_badges: updatedBadges,
+                updated_at: new Date().toISOString()
+            })
+        });
+    } catch (error) {
+        console.error('Failed to push badge:', error);
+    }
+
+    return { ...spirit, persona_badges: updatedBadges };
+}
+
+function normalizeSpiritRecord(spirit: any) {
+    return {
+        ...spirit,
+        persona_badges: Array.isArray(spirit?.persona_badges) ? spirit.persona_badges : [],
+        trust_level: typeof spirit?.trust_level === 'number' ? spirit.trust_level : 0,
+        welfare_score: typeof spirit?.welfare_score === 'number' ? spirit.welfare_score : 100
+    };
 }
