@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { User } from '@supabase/supabase-js';
 import { supabase, getCurrentUser, UserProfile } from '@/lib/supabase';
 import toast from 'react-hot-toast';
@@ -31,6 +31,91 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const createDefaultProfile = useCallback(async (userId: string, userData: User): Promise<UserProfile | null> => {
+    const fallbackName =
+      (userData.user_metadata?.full_name as string | undefined) ||
+      (userData.user_metadata?.name as string | undefined) ||
+      userData.email?.split('@')[0];
+
+    const fallbackAvatar =
+      (userData.user_metadata?.avatar_url as string | undefined) ||
+      (userData.user_metadata?.picture as string | undefined);
+
+    const profilePayload: {
+      user_id: string;
+      full_name?: string;
+      avatar_url?: string;
+    } = {
+      user_id: userId
+    };
+
+    if (fallbackName) {
+      profilePayload.full_name = fallbackName;
+    }
+
+    if (fallbackAvatar) {
+      profilePayload.avatar_url = fallbackAvatar;
+    }
+
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .upsert(profilePayload, { onConflict: 'user_id' })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error creating default user profile:', error);
+      return null;
+    }
+
+    if (!data) {
+      return null;
+    }
+
+    return data as UserProfile;
+  }, []);
+
+  const loadUserProfile = useCallback(async (userId: string, userData?: User): Promise<UserProfile | null> => {
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error loading user profile:', error);
+        setProfile(null);
+        return null;
+      }
+
+      if (data) {
+        setProfile(data);
+        return data;
+      }
+
+      if (!userData) {
+        console.warn('User profile not found and user data unavailable for creation');
+        setProfile(null);
+        return null;
+      }
+
+      const createdProfile = await createDefaultProfile(userId, userData);
+
+      if (createdProfile) {
+        setProfile(createdProfile);
+        return createdProfile;
+      }
+
+      setProfile(null);
+      return null;
+    } catch (error) {
+      console.error('Error loading user profile:', error);
+      setProfile(null);
+      return null;
+    }
+  }, [createDefaultProfile]);
+
   // Load user on mount (one-time check)
   useEffect(() => {
     async function loadUser() {
@@ -39,7 +124,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const currentUser = await getCurrentUser();
         setUser(currentUser);
         if (currentUser) {
-          await loadUserProfile(currentUser.id);
+          await loadUserProfile(currentUser.id, currentUser);
         }
       } catch (error) {
         console.error('Error loading user:', error);
@@ -56,7 +141,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(session?.user || null);
         if (session?.user) {
           // Load profile in next tick to avoid blocking the auth callback
-          setTimeout(() => loadUserProfile(session.user.id), 0);
+          setTimeout(() => {
+            void loadUserProfile(session.user!.id, session.user!);
+          }, 0);
         } else {
           setProfile(null);
         }
@@ -64,26 +151,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     );
 
     return () => subscription.unsubscribe();
-  }, []);
-
-  async function loadUserProfile(userId: string) {
-    try {
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('user_id', userId)
-        .maybeSingle();
-      
-      if (error) {
-        console.error('Error loading user profile:', error);
-        return;
-      }
-      
-      setProfile(data);
-    } catch (error) {
-      console.error('Error loading user profile:', error);
-    }
-  }
+  }, [loadUserProfile]);
 
   async function signInWithGoogle() {
     try {
@@ -132,7 +200,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       if (data.user) {
         setUser(data.user);
-        await loadUserProfile(data.user.id);
+        await loadUserProfile(data.user.id, data.user);
         toast.success('登入成功！');
       }
     } catch (error: any) {
@@ -160,20 +228,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       
       if (data.user) {
-        // Create user profile
-        const { error: profileError } = await supabase
-          .from('user_profiles')
-          .insert({
-            user_id: data.user.id,
-            full_name: email.split('@')[0], // Use email prefix as default name
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          });
-        
-        if (profileError) {
-          console.error('Error creating user profile:', profileError);
+        if (data.session) {
+          await loadUserProfile(data.user.id, data.user);
         }
-        
+
         toast.success('註冊成功！請檢查您的電子郵件以驗證帳戶。');
       }
     } catch (error: any) {
@@ -225,7 +283,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function refreshProfile() {
     if (user) {
-      await loadUserProfile(user.id);
+      await loadUserProfile(user.id, user);
     }
   }
 
@@ -250,7 +308,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       };
       
       setUser(user);
-      await loadUserProfile(userData.id);
+      await loadUserProfile(userData.id, user);
       
     } catch (error) {
       console.error('Error in login function:', error);

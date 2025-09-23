@@ -1,0 +1,633 @@
+.lin-login-page {
+  position: relative;
+  min-height: 100vh;
+  background: #150c2b;
+  color: #fff;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+  padding: 24px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+.lin-login-page * {
+  box-sizing: border-box;
+}
+
+.lin-golden-spiral-bg {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  background:
+    radial-gradient(ellipse 1200px 800px at 15% 25%, #2a1757 0%, transparent 60%),
+    radial-gradient(ellipse 1000px 800px at 80% 70%, #3b1c6f 0%, transparent 55%),
+    #150c2b;
+}
+
+.lin-spiral-svg,
+.lin-spiral-svg-2 {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.lin-spiral-svg {
+  opacity: 0.4;
+  animation: lin-spiral-rotate 60s linear infinite;
+}
+
+.lin-spiral-svg-2 {
+  opacity: 0.2;
+  animation: lin-spiral-rotate-reverse 80s linear infinite;
+}
+
+.lin-golden-lines {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  opacity: 0.3;
+}
+
+.lin-golden-line-h,
+.lin-golden-line-v {
+  position: absolute;
+  background: linear-gradient(90deg, transparent, rgba(255, 215, 0, 0.4), transparent);
+}
+
+.lin-golden-line-h {
+  top: 38.2%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  animation: lin-line-glow 8s ease-in-out infinite;
+}
+
+.lin-golden-line-v {
+  top: 0;
+  bottom: 0;
+  left: 61.8%;
+  width: 1px;
+  background: linear-gradient(180deg, transparent, rgba(255, 215, 0, 0.4), transparent);
+  animation: lin-line-glow 8s ease-in-out infinite 2s;
+}
+
+.lin-login-container {
+  width: 100%;
+  max-width: 420px;
+  padding: 60px 40px;
+  background: rgba(30, 15, 60, 0.85);
+  backdrop-filter: blur(25px) saturate(150%);
+  border-radius: 28px;
+  box-shadow:
+    0 30px 60px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(147, 51, 234, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  position: relative;
+  z-index: 1;
+  transform: translateY(0);
+  transition: transform 0.6s ease;
+}
+
+.lin-login-container:hover {
+  transform: translateY(-8px);
+}
+
+.lin-login-container::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at top, rgba(147, 51, 234, 0.05) 0%, transparent 70%);
+  border-radius: 28px;
+  pointer-events: none;
+}
+
+.lin-logo {
+  text-align: center;
+  margin-bottom: 48px;
+  position: relative;
+}
+
+.lin-subtitle {
+  font-size: 0.9rem;
+  color: rgba(168, 85, 247, 0.8);
+  font-weight: 300;
+  letter-spacing: 2px;
+  margin-bottom: 12px;
+  animation: lin-subtitle-glow 4s ease-in-out infinite;
+}
+
+.lin-logo h1 {
+  font-size: 3.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  background: linear-gradient(135deg, #ffffff 0%, #e879f9 40%, #c084fc 70%, #a855f7 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  margin-bottom: 6px;
+  animation: lin-title-glow 6s ease-in-out infinite;
+}
+
+.lin-beta {
+  position: absolute;
+  top: 5px;
+  right: -35px;
+  font-size: 0.7rem;
+  background: linear-gradient(135deg, #9333ea, #7c3aed);
+  padding: 4px 10px;
+  border-radius: 12px;
+  color: white;
+  font-weight: 500;
+  box-shadow: 0 4px 12px rgba(147, 51, 234, 0.3);
+  animation: lin-beta-pulse 3s ease-in-out infinite;
+}
+
+.lin-login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.lin-form-group {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.lin-form-group label {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.9);
+  letter-spacing: 0.3px;
+}
+
+.lin-input-wrapper {
+  position: relative;
+}
+
+.lin-input,
+.lin-input::placeholder {
+  font-size: 1rem;
+  font-weight: 400;
+}
+
+.lin-input {
+  width: 100%;
+  padding: 18px 24px;
+  background: rgba(15, 5, 35, 0.6);
+  border: 1.5px solid rgba(139, 92, 246, 0.25);
+  border-radius: 20px;
+  color: #fff;
+  transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.lin-input::placeholder {
+  color: rgba(168, 85, 247, 0.5);
+  font-weight: 300;
+}
+
+.lin-input:focus {
+  outline: none;
+  border-color: rgba(147, 51, 234, 0.8);
+  background: rgba(15, 5, 35, 0.8);
+  box-shadow:
+    0 0 0 3px rgba(147, 51, 234, 0.15),
+    0 8px 32px rgba(147, 51, 234, 0.2);
+  transform: translateY(-2px);
+}
+
+.lin-password-toggle {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding-right: 18px;
+  pointer-events: none;
+}
+
+.lin-password-toggle button {
+  pointer-events: auto;
+  background: none;
+  border: none;
+  color: rgba(168, 85, 247, 0.7);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.3s ease;
+}
+
+.lin-password-toggle button:hover {
+  color: rgba(232, 121, 249, 0.95);
+}
+
+.lin-options {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: -10px;
+}
+
+.lin-remember-me {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.9rem;
+  transition: color 0.3s ease;
+}
+
+.lin-remember-me:hover {
+  color: rgba(168, 85, 247, 1);
+}
+
+.lin-checkbox {
+  position: relative;
+  width: 18px;
+  height: 18px;
+}
+
+.lin-checkbox input {
+  position: absolute;
+  opacity: 0;
+  cursor: pointer;
+  inset: 0;
+  margin: 0;
+}
+
+.lin-checkmark {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 5, 35, 0.6);
+  border: 1.5px solid rgba(139, 92, 246, 0.4);
+  border-radius: 4px;
+  transition: all 0.3s ease;
+}
+
+.lin-checkbox input:checked + .lin-checkmark {
+  background: linear-gradient(135deg, #9333ea, #7c3aed);
+  border-color: #9333ea;
+}
+
+.lin-checkmark::after {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 2px;
+  width: 4px;
+  height: 8px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.lin-checkbox input:checked + .lin-checkmark::after {
+  opacity: 1;
+}
+
+.lin-forgot-link {
+  background: none;
+  border: none;
+  color: rgba(168, 85, 247, 0.8);
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 400;
+  transition: all 0.3s ease;
+  position: relative;
+  cursor: pointer;
+}
+
+.lin-forgot-link::after {
+  content: '';
+  position: absolute;
+  width: 0;
+  height: 1px;
+  bottom: -2px;
+  left: 0;
+  background: rgba(232, 121, 249, 1);
+  transition: width 0.3s ease;
+}
+
+.lin-forgot-link:hover {
+  color: rgba(232, 121, 249, 1);
+}
+
+.lin-forgot-link:hover::after {
+  width: 100%;
+}
+
+.lin-reset-hint {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1.5;
+}
+
+.lin-login-btn,
+.lin-google-btn {
+  position: relative;
+  padding: 20px;
+  border-radius: 20px;
+  width: 100%;
+  font-size: 1.05rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+  letter-spacing: 0.5px;
+  box-shadow: 0 8px 32px rgba(147, 51, 234, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  border: none;
+}
+
+.lin-login-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.6s;
+}
+
+.lin-login-btn:hover {
+  background: linear-gradient(135deg, #a855f7 0%, #8b5cf6 50%, #7c3aed 100%);
+  transform: translateY(-3px);
+  box-shadow: 0 15px 40px rgba(147, 51, 234, 0.4);
+}
+
+.lin-login-btn:hover::before {
+  left: 100%;
+}
+
+.lin-login-btn:active {
+  transform: translateY(-1px);
+}
+
+.lin-login-btn.lin-loading,
+.lin-google-btn.lin-loading {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.lin-login-btn.lin-loading::after,
+.lin-google-btn.lin-loading::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 20px;
+  height: 20px;
+  margin: -10px 0 0 -10px;
+  border-radius: 50%;
+  animation: lin-spin 1s linear infinite;
+}
+
+.lin-login-btn.lin-loading::after {
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top: 2px solid #fff;
+}
+
+.lin-login-btn {
+  background: linear-gradient(135deg, #9333ea 0%, #7c3aed 50%, #6d28d9 100%);
+  color: white;
+}
+
+.lin-google-btn {
+  margin-top: 20px;
+  background: #fff;
+  border: 1px solid #dadce0;
+  color: #3c4043;
+  box-shadow: 0 1px 3px rgba(60, 64, 67, 0.2), 0 4px 6px rgba(60, 64, 67, 0.15);
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.lin-google-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+.lin-google-btn:hover {
+  background: #f7f8f8;
+  box-shadow: 0 1px 2px rgba(60, 64, 67, 0.24), 0 1px 3px rgba(60, 64, 67, 0.12);
+}
+
+.lin-google-btn:active {
+  background: #f1f3f4;
+}
+
+.lin-google-btn.lin-loading::after {
+  border: 2px solid rgba(60, 64, 67, 0.25);
+  border-top: 2px solid #4285f4;
+}
+
+.lin-divider {
+  margin-top: 28px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.85rem;
+}
+
+.lin-divider::before,
+.lin-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+}
+
+.lin-bottom-links {
+  margin-top: 32px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.95rem;
+}
+
+.lin-bottom-links button {
+  background: none;
+  border: none;
+  color: rgba(168, 85, 247, 0.9);
+  text-decoration: none;
+  font-weight: 500;
+  margin-left: 8px;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.lin-bottom-links button:hover {
+  color: rgba(232, 121, 249, 1);
+  text-shadow: 0 0 8px rgba(232, 121, 249, 0.3);
+}
+
+.lin-notification {
+  position: fixed;
+  top: 30px;
+  right: 30px;
+  padding: 16px 24px;
+  border-radius: 16px;
+  font-weight: 500;
+  z-index: 1000;
+  transform: translateX(100%);
+  transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+  max-width: 320px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.lin-notification.lin-success {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.9), rgba(5, 150, 105, 0.9));
+  color: white;
+  backdrop-filter: blur(10px);
+}
+
+.lin-notification.lin-error {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.9), rgba(220, 38, 38, 0.9));
+  color: white;
+  backdrop-filter: blur(10px);
+}
+
+.lin-notification.lin-info {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.9), rgba(79, 70, 229, 0.9));
+  color: white;
+  backdrop-filter: blur(10px);
+}
+
+.lin-notification.lin-show {
+  transform: translateX(0);
+}
+
+@keyframes lin-spiral-rotate {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  50% {
+    transform: rotate(180deg) scale(1.05);
+  }
+  100% {
+    transform: rotate(360deg) scale(1);
+  }
+}
+
+@keyframes lin-spiral-rotate-reverse {
+  0% {
+    transform: rotate(0deg) scale(0.95);
+  }
+  50% {
+    transform: rotate(-180deg) scale(1.1);
+  }
+  100% {
+    transform: rotate(-360deg) scale(0.95);
+  }
+}
+
+@keyframes lin-line-glow {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+@keyframes lin-title-glow {
+  0%,
+  100% {
+    filter: brightness(1) saturate(1);
+  }
+  50% {
+    filter: brightness(1.1) saturate(1.2);
+  }
+}
+
+@keyframes lin-subtitle-glow {
+  0%,
+  100% {
+    opacity: 0.8;
+    color: rgba(168, 85, 247, 0.8);
+  }
+  50% {
+    opacity: 1;
+    color: rgba(214, 180, 80, 0.9);
+  }
+}
+
+@keyframes lin-beta-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 4px 12px rgba(147, 51, 234, 0.3);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 6px 20px rgba(147, 51, 234, 0.5);
+  }
+}
+
+@keyframes lin-spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 480px) {
+  .lin-login-page {
+    padding: 20px;
+  }
+
+  .lin-login-container {
+    padding: 40px 28px;
+    border-radius: 24px;
+  }
+
+  .lin-logo h1 {
+    font-size: 2.8rem;
+  }
+
+  .lin-beta {
+    right: -25px;
+    font-size: 0.65rem;
+    padding: 3px 8px;
+  }
+
+  .lin-input {
+    padding: 16px 20px;
+    font-size: 0.95rem;
+  }
+
+  .lin-login-btn,
+  .lin-google-btn {
+    padding: 18px;
+    font-size: 1rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lin-spiral-svg,
+  .lin-spiral-svg-2,
+  .lin-golden-line-h,
+  .lin-golden-line-v,
+  .lin-logo h1,
+  .lin-beta,
+  .lin-subtitle {
+    animation: none !important;
+  }
+}
