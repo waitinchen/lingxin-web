@@ -39,7 +39,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const currentUser = await getCurrentUser();
         setUser(currentUser);
         if (currentUser) {
-          await loadUserProfile(currentUser.id);
+          await loadUserProfile(currentUser.id, currentUser);
         }
       } catch (error) {
         console.error('Error loading user:', error);
@@ -56,7 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(session?.user || null);
         if (session?.user) {
           // Load profile in next tick to avoid blocking the auth callback
-          setTimeout(() => loadUserProfile(session.user.id), 0);
+          setTimeout(() => loadUserProfile(session.user.id, session.user), 0);
         } else {
           setProfile(null);
         }
@@ -66,19 +66,82 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  async function loadUserProfile(userId: string) {
+  async function loadUserProfile(userId: string, userData?: User) {
     try {
       const { data, error } = await supabase
         .from('user_profiles')
         .select('*')
         .eq('user_id', userId)
         .maybeSingle();
-      
-      if (error) {
+
+      if (error && error.code !== 'PGRST116') {
         console.error('Error loading user profile:', error);
         return;
       }
-      
+
+      if (!data) {
+        if (!userData) {
+          console.warn('User profile not found and user data unavailable for creation');
+          return;
+        }
+
+        const defaultProfile: { user_id: string; full_name?: string; avatar_url?: string } = {
+          user_id: userId
+        };
+
+        const fallbackName =
+          (userData.user_metadata?.full_name as string | undefined) ||
+          (userData.user_metadata?.name as string | undefined) ||
+          userData.email?.split('@')[0];
+
+        if (fallbackName) {
+          defaultProfile.full_name = fallbackName;
+        }
+
+        const fallbackAvatar =
+          (userData.user_metadata?.avatar_url as string | undefined) ||
+          (userData.user_metadata?.picture as string | undefined);
+
+        if (fallbackAvatar) {
+          defaultProfile.avatar_url = fallbackAvatar;
+        }
+
+        const { data: insertedProfile, error: insertError } = await supabase
+          .from('user_profiles')
+          .insert(defaultProfile)
+          .select()
+          .single();
+
+        if (insertError) {
+          if (insertError.code === '23505') {
+            const { data: existingProfile, error: refetchError } = await supabase
+              .from('user_profiles')
+              .select('*')
+              .eq('user_id', userId)
+              .maybeSingle();
+
+            if (refetchError) {
+              console.error('Error refetching existing user profile:', refetchError);
+              return;
+            }
+
+            if (existingProfile) {
+              setProfile(existingProfile);
+            }
+            return;
+          }
+
+          console.error('Error creating user profile:', insertError);
+          return;
+        }
+
+        if (insertedProfile) {
+          setProfile(insertedProfile);
+        }
+
+        return;
+      }
+
       setProfile(data);
     } catch (error) {
       console.error('Error loading user profile:', error);
@@ -132,7 +195,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       if (data.user) {
         setUser(data.user);
-        await loadUserProfile(data.user.id);
+        await loadUserProfile(data.user.id, data.user);
         toast.success('登入成功！');
       }
     } catch (error: any) {
@@ -160,20 +223,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       
       if (data.user) {
-        // Create user profile
-        const { error: profileError } = await supabase
-          .from('user_profiles')
-          .insert({
-            user_id: data.user.id,
-            full_name: email.split('@')[0], // Use email prefix as default name
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          });
-        
-        if (profileError) {
-          console.error('Error creating user profile:', profileError);
+        if (data.session) {
+          await loadUserProfile(data.user.id, data.user);
         }
-        
+
         toast.success('註冊成功！請檢查您的電子郵件以驗證帳戶。');
       }
     } catch (error: any) {
@@ -225,7 +278,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function refreshProfile() {
     if (user) {
-      await loadUserProfile(user.id);
+      await loadUserProfile(user.id, user);
     }
   }
 
@@ -250,7 +303,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       };
       
       setUser(user);
-      await loadUserProfile(userData.id);
+      await loadUserProfile(userData.id, user);
       
     } catch (error) {
       console.error('Error in login function:', error);
